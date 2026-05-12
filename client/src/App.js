@@ -3,83 +3,64 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { SocketProvider } from './context/SocketContext';
 import Navbar from './components/Navbar';
-import WhatsAppButton from './components/WhatsAppButton';
 import Home from './pages/Home';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import Leaderboard from './pages/Leaderboard';
 import Admin from './pages/Admin';
 import MatchDetail from './pages/MatchDetail';
-import CasinoPage from './pages/CasinoPage';
+import CasinoHub from './pages/CasinoHub';
+import './App.css';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="loading-screen">
-      <div className="loading-content">
-        <div className="loading-logo">⚡</div>
-        <div className="loading-text">LivePointPredict</div>
-      </div>
-    </div>
-  );
+  if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
   return user ? children : <Navigate to="/login" />;
 };
 
 const AdminRoute = ({ children }) => {
   const { user, loading } = useAuth();
-  if (loading) return (
-    <div className="loading-screen">
-      <div className="loading-content">
-        <div className="loading-logo">⚡</div>
-        <div className="loading-text">LivePointPredict</div>
-      </div>
-    </div>
-  );
+  if (loading) return <div className="loading-screen"><div className="spinner" /></div>;
   if (!user) return <Navigate to="/login" />;
   if (user.role !== 'admin') return <Navigate to="/" />;
   return children;
 };
 
-const AppRoutes = () => {
-  const { loading } = useAuth();
-  if (loading) return (
-    <div className="loading-screen">
-      <div className="loading-content">
-        <div className="loading-logo">⚡</div>
-        <div className="loading-text">LivePointPredict</div>
-      </div>
-    </div>
-  );
+const PublicRoute = ({ children }) => {
+  const { user } = useAuth();
+  return user ? <Navigate to="/" /> : children;
+};
 
+const AppContent = () => {
+  const { user } = useAuth();
   return (
     <>
-      <Navbar />
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route path="/match/:id" element={<MatchDetail />} />
-        <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
-        <Route path="/leaderboard" element={<Leaderboard />} />
-        <Route path="/casino" element={<ProtectedRoute><CasinoPage /></ProtectedRoute>} />
-        <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
-      <WhatsAppButton />
+      {user && <Navbar />}
+      <div className={user ? 'main-content' : ''}>
+        <Routes>
+          <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+          <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+          <Route path="/" element={<ProtectedRoute><Home /></ProtectedRoute>} />
+          <Route path="/match/:id" element={<ProtectedRoute><MatchDetail /></ProtectedRoute>} />
+          <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+          <Route path="/casino" element={<ProtectedRoute><CasinoHub /></ProtectedRoute>} />
+          <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
+      </div>
     </>
   );
 };
 
 function App() {
   return (
-    <Router>
-      <AuthProvider>
-        <SocketProvider>
-          <AppRoutes />
-        </SocketProvider>
-      </AuthProvider>
-    </Router>
+    <AuthProvider>
+      <SocketProvider>
+        <Router>
+          <AppContent />
+        </Router>
+      </SocketProvider>
+    </AuthProvider>
   );
 }
 

@@ -1,0 +1,57 @@
+.av-game { background: #0f1117; border-radius: 0; }
+
+.av-history { display: flex; gap: 5px; flex-wrap: wrap; padding: 8px 12px; border-bottom: 1px solid #2a2d3e; }
+.av-pill { padding: 3px 9px; border-radius: 20px; font-size: 11px; font-weight: 800; border: 1px solid; }
+.av-pill.pill-low { background: rgba(232,69,69,.15); color: #e84545; border-color: #e84545; }
+.av-pill.pill-mid { background: rgba(53,208,127,.15); color: #35d07f; border-color: #35d07f; }
+.av-pill.pill-high { background: rgba(245,197,24,.15); color: #f5c518; border-color: #f5c518; }
+
+.av-canvas-wrap { position: relative; height: 240px; background: linear-gradient(180deg,#0a0c12 0%,#0f1117 100%); overflow: hidden; }
+.av-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+
+.av-mult-center { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); text-align: center; z-index: 2; pointer-events: none; }
+.av-waiting { text-align: center; }
+.av-wait-label { font-size: 12px; color: #555; letter-spacing: 2px; text-transform: uppercase; }
+.av-wait-num { font-size: 56px; font-weight: 900; color: #4a90e2; line-height: 1; text-shadow: 0 0 20px rgba(74,144,226,.5); }
+.av-live-mult { font-size: 64px; font-weight: 900; line-height: 1; text-shadow: 0 0 30px currentColor; transition: color .2s; }
+.av-crashed-wrap { text-align: center; }
+.av-crashed-label { font-size: 14px; color: #e84545; font-weight: 800; letter-spacing: 3px; }
+.av-crashed-mult { font-size: 56px; font-weight: 900; color: #e84545; text-shadow: 0 0 30px rgba(232,69,69,.6); }
+
+.av-plane { position: absolute; font-size: 28px; z-index: 3; transition: left .1s linear, bottom .1s linear; animation: planeBob .4s ease-in-out infinite alternate; filter: drop-shadow(0 0 6px rgba(255,255,255,.4)); }
+@keyframes planeBob { from { transform: rotate(-8deg) translateY(-2px); } to { transform: rotate(-4deg) translateY(2px); } }
+
+.av-explosion { position: absolute; top: 45%; left: 55%; transform: translate(-50%,-50%); font-size: 60px; z-index: 4; animation: explode .5s ease; }
+@keyframes explode { 0% { transform: translate(-50%,-50%) scale(.5); opacity:1; } 100% { transform: translate(-50%,-50%) scale(2); opacity:.5; } }
+
+.av-result { padding: 8px 12px; text-align: center; font-weight: 800; font-size: 14px; animation: slideIn .3s ease; }
+.av-result.won { background: rgba(53,208,127,.15); color: #35d07f; border-bottom: 1px solid rgba(53,208,127,.3); }
+.av-result.lost { background: rgba(232,69,69,.15); color: #e84545; border-bottom: 1px solid rgba(232,69,69,.3); }
+@keyframes slideIn { from { transform: translateY(-8px); opacity: 0; } to { transform: none; opacity: 1; } }
+
+.av-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+.av-ctrl-left, .av-ctrl-right { display: flex; flex-direction: column; gap: 8px; }
+.av-ctrl-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+.av-input { background: #1a1d27; border: 1px solid #2e3245; border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 15px; font-weight: 700; outline: none; width: 100%; box-sizing: border-box; }
+.av-input:focus { border-color: #f5c518; }
+.av-qbtns { display: flex; gap: 4px; }
+.av-qbtn { flex: 1; padding: 7px 4px; background: #1a1d27; border: 1px solid #2e3245; border-radius: 6px; color: #666; font-size: 11px; cursor: pointer; transition: .15s; }
+.av-qbtn:hover:not(:disabled), .av-qbtn.active { background: rgba(74,144,226,.15); border-color: #4a90e2; color: #4a90e2; }
+.av-qbtn:disabled { opacity: .4; cursor: not-allowed; }
+
+.av-stat-box { background: #1a1d27; border-radius: 8px; padding: 8px 10px; border: 1px solid #2a2d3e; }
+.av-stat-label { font-size: 10px; color: #444; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 2px; }
+.av-stat-val { font-size: 20px; font-weight: 800; }
+
+.av-main-btn { padding: 14px; border: none; border-radius: 10px; font-size: 14px; font-weight: 800; cursor: pointer; letter-spacing: 1px; transition: .2s; width: 100%; }
+.av-main-btn.btn-idle { background: linear-gradient(135deg,#4a90e2,#2d6fc0); color: #fff; }
+.av-main-btn.btn-idle:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(74,144,226,.4); }
+.av-main-btn.btn-cashout { background: linear-gradient(135deg,#35d07f,#28a060); color: #000; animation: cashPulse .6s ease-in-out infinite alternate; }
+@keyframes cashPulse { from { box-shadow: 0 0 8px rgba(53,208,127,.4); } to { box-shadow: 0 0 24px rgba(53,208,127,.8); } }
+.av-main-btn.btn-waiting { background: #252836; color: #555; cursor: not-allowed; }
+.av-main-btn:disabled { opacity: .6; cursor: not-allowed; animation: none; }
+
+@media (max-width: 500px) {
+  .av-controls { grid-template-columns: 1fr; }
+  .av-live-mult { font-size: 48px; }
+}

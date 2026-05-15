@@ -10,7 +10,6 @@ import Dashboard from './pages/Dashboard';
 import Admin from './pages/Admin';
 import MatchDetail from './pages/MatchDetail';
 import CasinoHub from './pages/CasinoHub';
-import './App.css';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();

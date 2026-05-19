@@ -34,10 +34,15 @@ const Mines = ({ user, onPointsUpdate }) => {
     setLoading(true);
     let minePos;
     try {
+      // This route now EXISTS and deducts stake from DB immediately
       const res = await api.post('/casino/mines/start', { stake, mineCount });
       minePos = res.data.mines || genMines(mineCount);
-      onPointsUpdate(res.data.newPoints);
-    } catch (e) { minePos = genMines(mineCount); }
+      onPointsUpdate(res.data.newPoints); // points go down immediately
+    } catch (e) {
+      // Fallback: generate locally if API fails, but don't deduct (error state)
+      console.error('Mines start error:', e);
+      minePos = genMines(mineCount);
+    }
     setMines(minePos);
     setRevealed([]);
     setMult(1.00);
@@ -56,10 +61,8 @@ const Mines = ({ user, onPointsUpdate }) => {
       setActive(false);
       setAllRevealed(true);
       setResult({ won: false, amount: stake });
-      try {
-        const res = await api.post('/casino/play', { game: 'mines', stake, multiplier: 0, result: 'lost' });
-        onPointsUpdate(res.data.newPoints);
-      } catch (e) { console.error(e); }
+      // Stake already deducted at start, no need to call /play for loss
+      // Just update display — points already correct in DB
     } else {
       const newRev = [...revealed, i];
       setRevealed(newRev);
@@ -77,7 +80,8 @@ const Mines = ({ user, onPointsUpdate }) => {
     setResult({ won: true, amount: win, m: mult });
     setLoading(true);
     try {
-      const res = await api.post('/casino/play', { game: 'mines', stake, multiplier: mult, result: 'won' });
+      // Use dedicated cashout route — adds winnings (stake already deducted at start)
+      const res = await api.post('/casino/mines/cashout', { stake, multiplier: mult });
       onPointsUpdate(res.data.newPoints);
     } catch (e) { console.error(e); }
     setLoading(false);

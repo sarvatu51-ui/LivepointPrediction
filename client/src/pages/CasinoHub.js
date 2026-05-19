@@ -14,15 +14,17 @@ const GAMES = [
 ];
 
 const CasinoHub = () => {
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, refreshUser } = useAuth();
   const [activeGame, setActiveGame] = useState('aviator');
   const [localPoints, setLocalPoints] = useState(user?.points || 0);
 
   useEffect(() => { setLocalPoints(user?.points || 0); }, [user]);
 
-  const handlePointsUpdate = (newPoints) => {
+  const handlePointsUpdate = async (newPoints) => {
     setLocalPoints(newPoints);
-    if (updateUser) updateUser({ ...user, points: newPoints });
+    updateUser({ points: newPoints });
+    // Also refresh from DB to make sure it's accurate
+    if (refreshUser) await refreshUser();
   };
 
   const fakeUser = { ...user, points: localPoints };

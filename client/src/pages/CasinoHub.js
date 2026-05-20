@@ -14,17 +14,21 @@ const GAMES = [
 ];
 
 const CasinoHub = () => {
-  const { user, updateUser, refreshUser } = useAuth();
+  const { user, updatePoints } = useAuth();
   const [activeGame, setActiveGame] = useState('aviator');
   const [localPoints, setLocalPoints] = useState(user?.points || 0);
 
-  useEffect(() => { setLocalPoints(user?.points || 0); }, [user]);
+  // Only sync from AuthContext on first mount, not on every user change
+  useEffect(() => {
+    if (user?.points !== undefined) {
+      setLocalPoints(user.points);
+    }
+  }, []); // eslint-disable-line
 
-  const handlePointsUpdate = async (newPoints) => {
+  const handlePointsUpdate = (newPoints) => {
+    // Trust the server's newPoints value directly — no refetch needed
     setLocalPoints(newPoints);
-    updateUser({ points: newPoints });
-    // Also refresh from DB to make sure it's accurate
-    if (refreshUser) await refreshUser();
+    updatePoints(newPoints); // updates AuthContext so Navbar also updates
   };
 
   const fakeUser = { ...user, points: localPoints };

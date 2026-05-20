@@ -7,7 +7,6 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // On app load, check if user is already logged in
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -47,13 +46,29 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Update points in local state (after bet placed or settled)
+  // Update points locally (fast UI update)
   const updatePoints = (newPoints) => {
     setUser(prev => ({ ...prev, points: newPoints }));
   };
 
+  // Update any user fields locally
+  const updateUser = (fields) => {
+    setUser(prev => ({ ...prev, ...fields }));
+  };
+
+  // Fetch fresh user data from DB (call after every game result)
+  const refreshUser = async () => {
+    try {
+      const res = await api.get('/auth/me');
+      setUser(res.data);
+      return res.data;
+    } catch (e) {
+      console.error('refreshUser error:', e);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updatePoints, fetchMe }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, updatePoints, updateUser, refreshUser, fetchMe }}>
       {children}
     </AuthContext.Provider>
   );

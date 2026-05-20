@@ -128,5 +128,87 @@ async function settleBets(matchId, result) {
     await bet.save();
   }
 }
-
+router.post('/:id/livescore', async (req, res) => {
+  try {
+    const { runs, wickets, over, runRate, rawText, botSecret } = req.body;
+ 
+    // 🔒 Simple security check
+    if (botSecret !== process.env.BOT_SECRET) {
+      return res.status(401).json({ message: 'Unauthorized' });
+    }
+ 
+    const match = await Match.findById(req.params.id);
+    if (!match) return res.status(404).json({ message: 'Match not found' });
+ 
+    // Update live score
+    if (runs !== undefined && wickets !== undefined) {
+      match.score.teamA.runs = runs;
+      match.score.teamA.wickets = wickets;
+      if (over) match.score.teamA.overs = over;
+    }
+ 
+    // Calculate live odds from score
+    if (match.score.teamA.runs !== undefined) {
+      const updatedOdds = calculateCricketOdds(match);
+      match.oddsTeamA = updatedOdds.teamA;
+      match.oddsTeamB = updatedOdds.teamB;
+ 
+      // Save odds history
+      match.oddsHistory.push({
+        oddsTeamA: updatedOdds.teamA,
+        oddsTeamB: updatedOdds.teamB
+      });
+    }
+ 
+    await match.save();
+ 
+    // 🔴 Emit live update to ALL users instantly via Socket.io
+    const io = req.app.get('io');
+    io.emit('oddsUpdated', {
+      matchId: match._id,
+      oddsTeamA: match.oddsTeamA,
+      oddsTeamB: match.oddsTeamB,
+      score: match.score,
+      rawText: rawText
+    });
+ 
+    io.emit('matchUpdated', match);
+ 
+    console.log(`✅ Live score updated: ${runs}/${wickets} over ${over}`);
+    res.json({ success: true, match });
+ 
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+ 
+// 🧮 Calculate odds from live cricket score
+function calculateCricketOdds(match) {
+  const { runs, wickets, overs } = match.score.teamA;
+ 
+  // Default 50/50
+  let teamAProb = 50;
+ 
+  // Adjust for wickets (more wickets = lower probability)
+  teamAProb -= wickets * 4;
+ 
+  // Adjust for run rate pressure
+  if (overs > 0) {
+    const currentRR = runs / overs;
+    if (currentRR > 8) teamAProb += 10;
+    else if (currentRR > 7) teamAProb += 5;
+    else if (currentRR < 6) teamAProb -= 10;
+    else if (currentRR < 7) teamAProb -= 5;
+  }
+ 
+  // Keep between 10% and 90%
+  teamAProb = Math.min(90, Math.max(10, teamAProb));
+  const teamBProb = 100 - teamAProb;
+ 
+  return {
+    teamA: parseFloat((100 / teamAProb).toFixed(2)),
+    teamB: parseFloat((100 / teamBProb).toFixed(2))
+  };
+}
+ 
 module.exports = router;

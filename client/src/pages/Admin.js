@@ -3,7 +3,7 @@ import api from '../utils/api';
 import { useSocket } from '../context/SocketContext';
 import TransactionStats from '../components/TransactionStats';
 import './Admin.css';
-
+ 
 const Admin = () => {
   const socket = useSocket();
   const [tab, setTab] = useState('matches');
@@ -12,43 +12,78 @@ const Admin = () => {
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
   const [editingOdds, setEditingOdds] = useState({});
-  const [sessionModal, setSessionModal] = useState(null); // match to add session to
+  const [sessionModal, setSessionModal] = useState(null);
   const [newSession, setNewSession] = useState({ sessionType: '', label: '', line: '', oddsOver: 1.9, oddsUnder: 1.9, oddsTeamA: 1.9, oddsTeamB: 1.9 });
-  const [settleModal, setSettleModal] = useState(null); // { match, session }
+  const [settleModal, setSettleModal] = useState(null);
   const [settleValue, setSettleValue] = useState('');
-
+  const [activeMatchId, setActiveMatchId] = useState(null); // ← NEW
+  const [liveLoading, setLiveLoading] = useState(false);   // ← NEW
+ 
   const [newMatch, setNewMatch] = useState({
     teamA: '', teamB: '', teamALogo: '', teamBLogo: '',
     oddsTeamA: 1.9, oddsTeamB: 1.9, oddsDraw: '',
     sport: 'Cricket', status: 'upcoming', isCricket: true, cricApiMatchId: ''
   });
-
-  useEffect(() => { fetchMatches(); fetchTransactions(); }, []);
-
-  // Real-time: new transaction comes in
+ 
+  useEffect(() => { fetchMatches(); fetchTransactions(); fetchActiveMatch(); }, []);
+ 
   useEffect(() => {
     if (!socket) return;
     socket.on('newTransactionRequest', () => { fetchTransactions(); });
-    return () => socket.off('newTransactionRequest');
+    socket.on('activematchChanged', ({ matchId }) => { setActiveMatchId(matchId); }); // ← NEW
+    return () => { socket.off('newTransactionRequest'); socket.off('activematchChanged'); };
   }, [socket]);
-
+ 
   const fetchMatches = async () => {
     try { const res = await api.get('/matches'); setMatches(res.data); }
     catch (err) { showToast('Failed to load matches', 'error'); }
     finally { setLoading(false); }
   };
-
+ 
   const fetchTransactions = async () => {
     try { const res = await api.get('/transactions/all'); setTransactions(res.data); }
     catch (err) { console.error(err); }
   };
-
+ 
+  // ── NEW: fetch which match is currently live ─────────────────────────────
+  const fetchActiveMatch = async () => {
+    try {
+      const res = await api.get('/activematch');
+      setActiveMatchId(res.data.matchId || null);
+    } catch (err) { console.error(err); }
+  };
+ 
+  // ── NEW: set a match as the live match (bot sends scores here) ───────────
+  const setAsLiveMatch = async (matchId) => {
+    setLiveLoading(true);
+    try {
+      await api.post('/activematch/set', { matchId });
+      setActiveMatchId(matchId);
+      // Also set status to live
+      setMatches(prev => prev.map(m => ({
+        ...m,
+        status: m._id === matchId ? 'live' : m.status
+      })));
+      showToast('✅ Live match set! Bot will now send scores here.');
+    } catch (err) {
+      showToast('Failed to set live match', 'error');
+    } finally { setLiveLoading(false); }
+  };
+ 
+  // ── NEW: clear live match ────────────────────────────────────────────────
+  const clearLiveMatch = async () => {
+    try {
+      await api.post('/activematch/clear');
+      setActiveMatchId(null);
+      showToast('Live match cleared');
+    } catch (err) { showToast('Failed', 'error'); }
+  };
+ 
   const showToast = (msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3500);
   };
-
-  // ── Match Actions ─────────────────────────────────────────
+ 
   const handleAddMatch = async (e) => {
     e.preventDefault();
     try {
@@ -62,7 +97,7 @@ const Admin = () => {
       showToast('Match created!');
     } catch (err) { showToast(err.response?.data?.message || 'Failed', 'error'); }
   };
-
+ 
   const updateMatch = async (matchId, updates) => {
     try {
       const res = await api.put(`/matches/${matchId}`, updates);
@@ -70,21 +105,20 @@ const Admin = () => {
       showToast('Updated!');
     } catch (err) { showToast('Update failed', 'error'); }
   };
-
+ 
   const deleteMatch = async (matchId) => {
     if (!window.confirm('Delete this match?')) return;
     try { await api.delete(`/matches/${matchId}`); setMatches(prev => prev.filter(m => m._id !== matchId)); showToast('Deleted'); }
     catch (err) { showToast('Delete failed', 'error'); }
   };
-
+ 
   const saveOdds = (matchId) => {
     const odds = editingOdds[matchId];
     if (!odds) return;
     updateMatch(matchId, { oddsTeamA: parseFloat(odds.oddsTeamA), oddsTeamB: parseFloat(odds.oddsTeamB) });
     setEditingOdds(prev => { const n = { ...prev }; delete n[matchId]; return n; });
   };
-
-  // ── Session Actions ───────────────────────────────────────
+ 
   const addSession = async (matchId) => {
     try {
       const match = matches.find(m => m._id === matchId);
@@ -99,7 +133,6 @@ const Admin = () => {
         oddsTeamB: isToss ? parseFloat(newSession.oddsTeamB) : null,
         isOpen: true
       };
-
       const updatedSessions = [...(match.sessions || []), sessionPayload];
       const res = await api.put(`/matches/${matchId}`, { sessions: updatedSessions });
       setMatches(prev => prev.map(m => m._id === matchId ? res.data : m));
@@ -108,43 +141,32 @@ const Admin = () => {
       showToast('Session added!');
     } catch (err) { showToast('Failed to add session', 'error'); }
   };
-
+ 
   const settleSession = async () => {
     if (!settleModal) return;
     const { match, session } = settleModal;
-    const result = settleValue;
-    if (!result) return showToast('Select a result', 'error');
+    if (!settleValue) return showToast('Select a result', 'error');
     try {
-      await api.put(`/sessions/${match._id}/settle`, {
-        sessionType: session.sessionType,
-        result,
-        actualValue: parseFloat(settleValue) || null
-      });
+      await api.put(`/sessions/${match._id}/settle`, { sessionType: session.sessionType, result: settleValue, actualValue: parseFloat(settleValue) || null });
       fetchMatches();
       setSettleModal(null);
       showToast('Session settled!');
     } catch (err) { showToast('Failed to settle', 'error'); }
   };
-
+ 
   const closeSession = async (matchId, sessionType) => {
     const match = matches.find(m => m._id === matchId);
-    const updatedSessions = match.sessions.map(s =>
-      s.sessionType === sessionType ? { ...s, isOpen: false } : s
-    );
+    const updatedSessions = match.sessions.map(s => s.sessionType === sessionType ? { ...s, isOpen: false } : s);
     await updateMatch(matchId, { sessions: updatedSessions });
   };
-
-  // ── Transaction Actions ───────────────────────────────────
+ 
   const processTransaction = async (txnId, action, note = '') => {
-    try {
-      await api.put(`/transactions/${txnId}/${action}`, { note });
-      fetchTransactions();
-      showToast(`Transaction ${action}d!`);
-    } catch (err) { showToast('Failed', 'error'); }
+    try { await api.put(`/transactions/${txnId}/${action}`, { note }); fetchTransactions(); showToast(`Transaction ${action}d!`); }
+    catch (err) { showToast('Failed', 'error'); }
   };
-
+ 
   const pendingTxns = transactions.filter(t => t.status === 'pending');
-
+ 
   return (
     <div className="admin-page">
       <div className="container">
@@ -152,21 +174,24 @@ const Admin = () => {
           <h1 className="admin-title">⚙️ Admin Panel</h1>
           <p className="admin-sub">Manage matches, sessions, and transactions</p>
         </div>
-
+ 
+        {/* ── NEW: Live Match Banner ── */}
+        {activeMatchId && (
+          <div className="live-match-banner">
+            <span>🔴 LIVE BOT ACTIVE — Scores sending to: <strong>{matches.find(m => m._id === activeMatchId)?.teamA} vs {matches.find(m => m._id === activeMatchId)?.teamB}</strong></span>
+            <button className="btn btn-danger btn-sm" onClick={clearLiveMatch}>Stop Live</button>
+          </div>
+        )}
+ 
         {/* Tabs */}
         <div className="admin-tabs">
-          <button className={`admin-tab ${tab === 'matches' ? 'active' : ''}`} onClick={() => setTab('matches')}>
-            📋 Matches ({matches.length})
-          </button>
-          <button className={`admin-tab ${tab === 'add' ? 'active' : ''}`} onClick={() => setTab('add')}>
-            ➕ Add Match
-          </button>
+          <button className={`admin-tab ${tab === 'matches' ? 'active' : ''}`} onClick={() => setTab('matches')}>📋 Matches ({matches.length})</button>
+          <button className={`admin-tab ${tab === 'add' ? 'active' : ''}`} onClick={() => setTab('add')}>➕ Add Match</button>
           <button className={`admin-tab ${tab === 'transactions' ? 'active' : ''}`} onClick={() => setTab('transactions')}>
-            💳 Transactions
-            {pendingTxns.length > 0 && <span className="txn-badge">{pendingTxns.length}</span>}
+            💳 Transactions {pendingTxns.length > 0 && <span className="txn-badge">{pendingTxns.length}</span>}
           </button>
         </div>
-
+ 
         {/* ── ADD MATCH ── */}
         {tab === 'add' && (
           <div className="card admin-form-card animate-in">
@@ -221,17 +246,11 @@ const Admin = () => {
                   </select>
                 </div>
               </div>
-              {newMatch.isCricket && (
-                <div className="form-group">
-                  <label className="form-label">CricAPI Match ID (optional - for live score sync)</label>
-                  <input className="form-input" value={newMatch.cricApiMatchId} onChange={e => setNewMatch({ ...newMatch, cricApiMatchId: e.target.value })} placeholder="Get from CricAPI dashboard" />
-                </div>
-              )}
               <button type="submit" className="btn btn-primary btn-lg">Create Match</button>
             </form>
           </div>
         )}
-
+ 
         {/* ── MATCHES ── */}
         {tab === 'matches' && (
           <div className="admin-matches">
@@ -250,8 +269,28 @@ const Admin = () => {
                     <span className={`badge badge-${match.status}`}>{match.status}</span>
                   </div>
                 </div>
-
-                {/* Score display for cricket */}
+ 
+                {/* ── NEW: Set as Live Match button ── */}
+                {match.isCricket && (
+                  <div className="am-live-control">
+                    {activeMatchId === match._id ? (
+                      <div className="live-active-row">
+                        <span className="live-active-badge">🔴 BOT ACTIVE — Receiving Live Scores</span>
+                        <button className="btn btn-danger btn-sm" onClick={clearLiveMatch}>Stop</button>
+                      </div>
+                    ) : (
+                      <button
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setAsLiveMatch(match._id)}
+                        disabled={liveLoading}
+                      >
+                        📡 Set as Live Match
+                      </button>
+                    )}
+                  </div>
+                )}
+ 
+                {/* Score display */}
                 {match.isCricket && match.score && (
                   <div className="am-score">
                     <span>{match.teamA}: {match.score.teamA?.runs}/{match.score.teamA?.wickets} ({match.score.teamA?.overs} ov)</span>
@@ -259,7 +298,7 @@ const Admin = () => {
                     <span>{match.teamB}: {match.score.teamB?.runs}/{match.score.teamB?.wickets} ({match.score.teamB?.overs} ov)</span>
                   </div>
                 )}
-
+ 
                 {/* Odds editing */}
                 <div className="am-odds-row">
                   {editingOdds[match._id] ? (
@@ -278,7 +317,7 @@ const Admin = () => {
                     </div>
                   )}
                 </div>
-
+ 
                 {/* Status + Winner actions */}
                 <div className="am-actions">
                   <div className="action-group">
@@ -298,7 +337,7 @@ const Admin = () => {
                   {match.result && <span className="result-declared">🏆 Winner: {match.result === 'teamA' ? match.teamA : match.result === 'teamB' ? match.teamB : 'Draw'}</span>}
                   <button className="btn btn-danger btn-sm" style={{ marginLeft: 'auto' }} onClick={() => deleteMatch(match._id)}>🗑</button>
                 </div>
-
+ 
                 {/* Sessions (cricket only) */}
                 {match.isCricket && (
                   <div className="am-sessions">
@@ -314,6 +353,7 @@ const Admin = () => {
                           <div key={session._id || session.sessionType} className={`session-admin-row ${session.result ? 'settled' : session.isOpen ? 'open' : 'closed'}`}>
                             <span className="session-admin-label">{session.label}</span>
                             {session.line && <span className="session-admin-line">Line: {session.line}</span>}
+                            {session.actualScore && <span className="session-actual">Actual: {session.actualScore}</span>}
                             <span className={`session-status-dot ${session.result ? 'settled' : session.isOpen ? 'open' : 'closed'}`}>
                               {session.result ? `✅ ${session.result}` : session.isOpen ? '🟢 Open' : '🔴 Closed'}
                             </span>
@@ -333,7 +373,7 @@ const Admin = () => {
             ))}
           </div>
         )}
-
+ 
         {/* ── TRANSACTIONS ── */}
         {tab === 'transactions' && (
           <div className="admin-transactions">
@@ -341,8 +381,6 @@ const Admin = () => {
               <h2 className="section-title">💳 Transaction Dashboard</h2>
               <span className="pending-count">{pendingTxns.length} pending</span>
             </div>
-
-            {/* Pending requests always visible at top */}
             {pendingTxns.length > 0 && (
               <div className="pending-requests-section">
                 <div className="pending-section-title">⚡ Pending — Action Required</div>
@@ -369,25 +407,19 @@ const Admin = () => {
                         </div>
                       </div>
                       <div className="txn-actions">
-                        <button className="btn btn-success btn-sm" onClick={() => processTransaction(txn._id, 'approve')}>
-                          ✅ Approve {txn.type === 'deposit' ? `(Add ${txn.points} pts)` : '(Pay & Confirm)'}
-                        </button>
-                        <button className="btn btn-danger btn-sm" onClick={() => processTransaction(txn._id, 'reject', 'Rejected by admin')}>
-                          ❌ Reject {txn.type === 'withdrawal' ? '(Refund pts)' : ''}
-                        </button>
+                        <button className="btn btn-success btn-sm" onClick={() => processTransaction(txn._id, 'approve')}>✅ Approve {txn.type === 'deposit' ? `(Add ${txn.points} pts)` : '(Confirm)'}</button>
+                        <button className="btn btn-danger btn-sm" onClick={() => processTransaction(txn._id, 'reject', 'Rejected by admin')}>❌ Reject</button>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
-            {/* Stats + History with filters */}
             <TransactionStats transactions={transactions} />
           </div>
         )}
       </div>
-
+ 
       {/* Add Session Modal */}
       {sessionModal && (
         <div className="modal-overlay" onClick={() => setSessionModal(null)}>
@@ -407,7 +439,6 @@ const Admin = () => {
                   <option value="over_15">15-Over Total</option>
                   <option value="over_20">20-Over Total</option>
                   <option value="next_over">Next Over Runs</option>
-                  <option value="next_wicket">Next Wicket</option>
                   <option value="custom">Custom</option>
                 </select>
               </div>
@@ -416,22 +447,20 @@ const Admin = () => {
                 <input className="form-input" value={newSession.label} onChange={e => setNewSession({ ...newSession, label: e.target.value })} placeholder="e.g. Runs in 6-Over Powerplay" />
               </div>
               {newSession.sessionType !== 'toss' && (
-                <>
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label className="form-label">Over/Under Line</label>
-                      <input type="number" step="0.5" className="form-input" value={newSession.line} onChange={e => setNewSession({ ...newSession, line: e.target.value })} placeholder="e.g. 48.5 runs" />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Odds Over</label>
-                      <input type="number" step="0.01" className="form-input" value={newSession.oddsOver} onChange={e => setNewSession({ ...newSession, oddsOver: e.target.value })} />
-                    </div>
-                    <div className="form-group">
-                      <label className="form-label">Odds Under</label>
-                      <input type="number" step="0.01" className="form-input" value={newSession.oddsUnder} onChange={e => setNewSession({ ...newSession, oddsUnder: e.target.value })} />
-                    </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label className="form-label">Over/Under Line</label>
+                    <input type="number" step="0.5" className="form-input" value={newSession.line} onChange={e => setNewSession({ ...newSession, line: e.target.value })} placeholder="e.g. 48.5" />
                   </div>
-                </>
+                  <div className="form-group">
+                    <label className="form-label">Odds Over</label>
+                    <input type="number" step="0.01" className="form-input" value={newSession.oddsOver} onChange={e => setNewSession({ ...newSession, oddsOver: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label className="form-label">Odds Under</label>
+                    <input type="number" step="0.01" className="form-input" value={newSession.oddsUnder} onChange={e => setNewSession({ ...newSession, oddsUnder: e.target.value })} />
+                  </div>
+                </div>
               )}
               {newSession.sessionType === 'toss' && (
                 <div className="form-row">
@@ -450,7 +479,7 @@ const Admin = () => {
           </div>
         </div>
       )}
-
+ 
       {/* Settle Session Modal */}
       {settleModal && (
         <div className="modal-overlay" onClick={() => setSettleModal(null)}>
@@ -482,10 +511,11 @@ const Admin = () => {
           </div>
         </div>
       )}
-
+ 
       {toast && <div className={`toast alert alert-${toast.type === 'error' ? 'error' : 'success'}`}>{toast.msg}</div>}
     </div>
   );
 };
-
+ 
 export default Admin;
+ 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../utils/api';
 import './Aviator.css';
 
@@ -74,12 +74,17 @@ const Aviator = ({ user, onPointsUpdate }) => {
     const handleCrash = async (finalMult) => {
       setGameState('crashed');
       setHistory(prev => [parseFloat(finalMult.toFixed(2)), ...prev.slice(0, 7)]);
+
       if (betRef.current && !cashRef.current) {
-        setResult({ won: false, amount: stakeRef.current });
+        // User lost — deduct stake from DB
+        const s = stakeRef.current;
+        setResult({ won: false, amount: s });
         try {
-          const res = await api.post('/casino/play', { game: 'aviator', stake: stakeRef.current, multiplier: 0, result: 'lost' });
+          const res = await api.post('/casino/play', {
+            game: 'aviator', stake: s, multiplier: 0, result: 'lost'
+          });
           onPointsUpdate(res.data.newPoints);
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error('Aviator loss save error:', e); }
       }
       setTimeout(() => startCountdownRef.current(), 3000);
     };
@@ -111,7 +116,7 @@ const Aviator = ({ user, onPointsUpdate }) => {
     };
     startFlightRef.current = flight;
 
-    const countdown = () => {
+    const startCountdown = () => {
       setGameState('waiting');
       setMult(1.00);
       setBetPlaced(false);
@@ -134,8 +139,8 @@ const Aviator = ({ user, onPointsUpdate }) => {
         if (cd <= 0) { clearInterval(timerRef.current); startFlightRef.current(); }
       }, 1000);
     };
-    startCountdownRef.current = countdown;
-    countdown();
+    startCountdownRef.current = startCountdown;
+    startCountdown();
 
     return () => { clearInterval(intervalRef.current); clearInterval(timerRef.current); };
   }, []); // eslint-disable-line
@@ -146,14 +151,18 @@ const Aviator = ({ user, onPointsUpdate }) => {
       setBetPlaced(true);
       betRef.current = true;
     } else if (gameState === 'flying' && betPlaced && !cashedOut) {
+      // Cash out — save to DB immediately
       setCashedOut(true);
       cashRef.current = true;
-      const win = Math.floor(stake * multRef.current);
-      setResult({ won: true, amount: win, m: multRef.current });
+      const currentMult = multRef.current;
+      const win = Math.floor(stake * currentMult);
+      setResult({ won: true, amount: win, m: currentMult });
       try {
-        const res = await api.post('/casino/play', { game: 'aviator', stake, multiplier: multRef.current, result: 'won' });
-        onPointsUpdate(res.data.newPoints);
-      } catch (e) { console.error(e); }
+        const res = await api.post('/casino/play', {
+          game: 'aviator', stake, multiplier: currentMult, result: 'won'
+        });
+        onPointsUpdate(res.data.newPoints); // instant update
+      } catch (e) { console.error('Aviator cashout save error:', e); }
     }
   };
 
@@ -161,7 +170,7 @@ const Aviator = ({ user, onPointsUpdate }) => {
 
   const btnState = () => {
     if (gameState === 'flying' && betPlaced && !cashedOut) return 'cashout';
-    if ((gameState === 'waiting' || gameState === 'flying') && !betPlaced) return 'idle';
+    if (gameState === 'waiting' && !betPlaced) return 'idle';
     return 'waiting';
   };
 
@@ -169,8 +178,8 @@ const Aviator = ({ user, onPointsUpdate }) => {
     if (gameState === 'flying' && betPlaced && !cashedOut) return `CASH OUT ${Math.floor(stake * mult)} PTS`;
     if (gameState === 'waiting' && !betPlaced) return `BET ${stake} PTS`;
     if (gameState === 'flying' && !betPlaced) return 'In Flight...';
-    if (betPlaced && !cashedOut) return 'Bet Placed ✓';
     if (cashedOut) return 'Cashed Out ✓';
+    if (betPlaced) return 'Bet Placed ✓';
     return 'Next round...';
   };
 
@@ -207,7 +216,9 @@ const Aviator = ({ user, onPointsUpdate }) => {
       </div>
       {result && (
         <div className={`av-result ${result.won ? 'won' : 'lost'}`}>
-          {result.won ? `🎉 Cashed out at ${result.m.toFixed(2)}x — Won ${result.amount} pts!` : `💸 Flew away! Lost ${result.amount} pts`}
+          {result.won
+            ? `🎉 Cashed out at ${result.m?.toFixed(2)}x — Won ${result.amount} pts!`
+            : `💸 Flew away! Lost ${result.amount} pts`}
         </div>
       )}
       <div className="av-controls">
@@ -234,8 +245,8 @@ const Aviator = ({ user, onPointsUpdate }) => {
               {betPlaced && !cashedOut ? `${Math.floor(stake * mult)} pts` : '0 pts'}
             </div>
           </div>
-          <button className={`av-main-btn btn-${btnState()}`} onClick={handleAction}
-            disabled={btnState() === 'waiting'}>
+          <button className={`av-main-btn btn-${btnState()}`}
+            onClick={handleAction} disabled={btnState() === 'waiting'}>
             {btnText()}
           </button>
         </div>

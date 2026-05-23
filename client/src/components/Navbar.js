@@ -9,11 +9,7 @@ const Navbar = () => {
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
+  const handleLogout = () => { logout(); navigate('/login'); };
   const isActive = (path) => location.pathname === path ? 'active' : '';
 
   return (
@@ -21,9 +17,7 @@ const Navbar = () => {
       <div className="navbar-inner">
         <Link to="/" className="navbar-logo">
           <span className="logo-icon">⚡</span>
-          <span className="logo-text">
-            Live<span className="logo-accent">Point</span>Predict
-          </span>
+          <span className="logo-text">Live<span className="logo-accent">Point</span>Predict</span>
         </Link>
 
         {user && (
@@ -40,10 +34,12 @@ const Navbar = () => {
         <div className="navbar-right">
           {user ? (
             <>
-              <div className="points-pill">
+              {/* Wallet / Points pill — clickable */}
+              <Link to="/wallet" className="points-pill" title="View wallet & bet history">
                 <span className="points-icon">🪙</span>
-                <span className="points-amount">{user.points?.toLocaleString()}</span>
-              </div>
+                <span className="points-amount">{(user.points || 0).toLocaleString()}</span>
+              </Link>
+
               <div className="user-menu" onClick={() => setMenuOpen(!menuOpen)}>
                 <div className="user-avatar">{user.name?.charAt(0).toUpperCase()}</div>
                 <span className="user-name">{user.name}</span>
@@ -54,6 +50,9 @@ const Navbar = () => {
                       <div className="dropdown-name">{user.name}</div>
                       <div className="dropdown-email">{user.email}</div>
                     </div>
+                    <Link to="/wallet" className="dropdown-item" onClick={() => setMenuOpen(false)}>
+                      👛 My Wallet
+                    </Link>
                     <Link to="/dashboard" className="dropdown-item" onClick={() => setMenuOpen(false)}>
                       📊 Dashboard
                     </Link>
@@ -84,6 +83,7 @@ const Navbar = () => {
           <Link to="/" className="mobile-link" onClick={() => setMenuOpen(false)}>Matches</Link>
           <Link to="/casino" className="mobile-link" onClick={() => setMenuOpen(false)}>🎰 Casino</Link>
           <Link to="/dashboard" className="mobile-link" onClick={() => setMenuOpen(false)}>Dashboard</Link>
+          <Link to="/wallet" className="mobile-link" onClick={() => setMenuOpen(false)}>👛 Wallet</Link>
           {user.role === 'admin' && (
             <Link to="/admin" className="mobile-link" onClick={() => setMenuOpen(false)}>Admin Panel</Link>
           )}

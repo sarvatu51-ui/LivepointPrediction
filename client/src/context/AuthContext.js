@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 
-const AuthContext = createContext(null);
+const AuthContext = createContext();
+export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
@@ -10,35 +11,27 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
-      fetchMe();
+      api.get('/auth/me')
+        .then(res => setUser(res.data))
+        .catch(() => localStorage.removeItem('token'))
+        .finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
   }, []);
 
-  const fetchMe = async () => {
-    try {
-      const res = await api.get('/auth/me');
-      setUser(res.data);
-    } catch {
-      localStorage.removeItem('token');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const login = async (email, password) => {
     const res = await api.post('/auth/login', { email, password });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
-    return res.data.user;
+    return res.data;
   };
 
   const register = async (name, email, password) => {
     const res = await api.post('/auth/register', { name, email, password });
     localStorage.setItem('token', res.data.token);
     setUser(res.data.user);
-    return res.data.user;
+    return res.data;
   };
 
   const logout = () => {
@@ -46,18 +39,18 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  // Update points locally (fast UI update)
-  const updatePoints = (newPoints) => {
-    setUser(prev => ({ ...prev, points: newPoints }));
-  };
+  // ✅ Instantly update points in UI (no lag)
+  const updateUser = useCallback((updatedUser) => {
+    setUser(updatedUser);
+  }, []);
 
-  // Update any user fields locally
-  const updateUser = (fields) => {
-    setUser(prev => ({ ...prev, ...fields }));
-  };
+  // ✅ Instantly update just the points number
+  const updatePoints = useCallback((newPoints) => {
+    setUser(prev => prev ? { ...prev, points: newPoints } : prev);
+  }, []);
 
-  // Fetch fresh user data from DB (call after every game result)
-  const refreshUser = async () => {
+  // ✅ Re-fetch from DB (called after game to confirm)
+  const refreshUser = useCallback(async () => {
     try {
       const res = await api.get('/auth/me');
       setUser(res.data);
@@ -65,17 +58,14 @@ export const AuthProvider = ({ children }) => {
     } catch (e) {
       console.error('refreshUser error:', e);
     }
-  };
+  }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout, updatePoints, updateUser, refreshUser, fetchMe }}>
+    <AuthContext.Provider value={{
+      user, loading, login, register, logout,
+      updateUser, updatePoints, refreshUser
+    }}>
       {children}
     </AuthContext.Provider>
   );
-};
-
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
-  return context;
 };

@@ -1,0 +1,94 @@
+.wallet-page { max-width: 780px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+
+/* Header */
+.wallet-header { display: flex; align-items: center; justify-content: space-between; }
+.wallet-title { display: flex; align-items: center; gap: 12px; }
+.wallet-icon { font-size: 28px; }
+.wallet-title h1 { font-size: 20px; font-weight: 800; color: #fff; margin: 0 0 2px; }
+.wallet-title p { font-size: 12px; color: #555; margin: 0; }
+
+/* Balance card */
+.balance-card { background: linear-gradient(135deg, #1a1d27, #1e2235); border: 1px solid #2a2d3e; border-radius: 16px; padding: 20px; }
+.balance-main { margin-bottom: 16px; }
+.balance-label { font-size: 10px; color: #555; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 6px; }
+.balance-amount { display: flex; align-items: baseline; gap: 8px; }
+.balance-icon { font-size: 28px; }
+.balance-num { font-size: 48px; font-weight: 900; color: #f5c518; line-height: 1; }
+.balance-unit { font-size: 16px; color: #888; font-weight: 600; }
+.balance-stats { display: flex; align-items: center; background: rgba(0,0,0,.2); border-radius: 10px; padding: 10px 16px; }
+.bal-stat { flex: 1; text-align: center; }
+.bal-stat-val { font-size: 16px; font-weight: 800; }
+.bal-stat-val.green { color: #35d07f; }
+.bal-stat-val.red { color: #e84545; }
+.bal-stat-lbl { font-size: 10px; color: #555; margin-top: 2px; text-transform: uppercase; letter-spacing: 1px; }
+.bal-stat-div { width: 1px; height: 30px; background: rgba(255,255,255,.08); margin: 0 4px; }
+
+/* Summary grid */
+.summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.summary-card { background: #1a1d27; border: 1px solid #2a2d3e; border-radius: 12px; padding: 14px 10px; text-align: center; }
+.summary-card.green-card { border-color: rgba(53,208,127,.3); background: rgba(53,208,127,.05); }
+.summary-card.red-card { border-color: rgba(232,69,69,.3); background: rgba(232,69,69,.05); }
+.sum-icon { font-size: 22px; margin-bottom: 6px; }
+.sum-val { font-size: 22px; font-weight: 900; color: #fff; line-height: 1; }
+.sum-lbl { font-size: 10px; color: #555; margin-top: 4px; text-transform: uppercase; letter-spacing: 1px; }
+
+/* History section */
+.history-section { background: #1a1d27; border: 1px solid #2a2d3e; border-radius: 16px; overflow: hidden; }
+.history-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; border-bottom: 1px solid #2a2d3e; }
+.history-header h2 { font-size: 16px; font-weight: 800; color: #fff; margin: 0; }
+.refresh-btn { background: rgba(255,255,255,.05); border: 1px solid #2a2d3e; border-radius: 8px; padding: 6px 12px; color: #888; font-size: 12px; cursor: pointer; transition: .15s; }
+.refresh-btn:hover { background: rgba(255,255,255,.1); color: #fff; }
+
+/* Filter tabs */
+.filter-tabs { display: flex; gap: 4px; padding: 10px 12px; border-bottom: 1px solid #2a2d3e; overflow-x: auto; }
+.filter-tab { flex-shrink: 0; padding: 6px 14px; background: transparent; border: 1px solid #2a2d3e; border-radius: 20px; color: #666; font-size: 12px; font-weight: 600; cursor: pointer; transition: .15s; white-space: nowrap; }
+.filter-tab:hover { border-color: #3a3d4e; color: #aaa; }
+.filter-tab.active { background: rgba(245,197,24,.1); border-color: #f5c518; color: #f5c518; }
+
+/* Loading */
+.wallet-loading { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; gap: 12px; }
+.wallet-spinner { width: 32px; height: 32px; border: 3px solid #2a2d3e; border-top-color: #f5c518; border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.wallet-loading p { color: #555; font-size: 14px; }
+
+/* Empty */
+.empty-history { display: flex; flex-direction: column; align-items: center; padding: 40px; gap: 8px; }
+.empty-icon { font-size: 40px; }
+.empty-history p { font-size: 16px; font-weight: 700; color: #555; margin: 0; }
+.empty-history span { font-size: 13px; color: #444; }
+
+/* Bet list */
+.bet-list { display: flex; flex-direction: column; }
+.bet-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid #1e2130; transition: .15s; gap: 8px; }
+.bet-row:last-child { border-bottom: none; }
+.bet-row:hover { background: rgba(255,255,255,.02); }
+.bet-row.won { border-left: 3px solid #35d07f; }
+.bet-row.lost { border-left: 3px solid #e84545; }
+.bet-row.pending { border-left: 3px solid #f5c518; }
+
+.bet-left { flex: 1; min-width: 0; }
+.bet-game { font-size: 14px; font-weight: 700; color: #ddd; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bet-date { font-size: 11px; color: #444; margin-top: 2px; }
+.bet-team { font-size: 11px; color: #666; margin-top: 2px; }
+
+.bet-mid { display: flex; flex-direction: column; gap: 3px; min-width: 90px; }
+.bet-stake-row, .bet-mult-row { display: flex; justify-content: space-between; gap: 8px; }
+.bet-label { font-size: 10px; color: #444; text-transform: uppercase; }
+.bet-stake-val { font-size: 12px; font-weight: 700; color: #888; }
+.bet-mult-val { font-size: 12px; font-weight: 700; color: #4a90e2; }
+
+.bet-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.bet-result-badge { padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; letter-spacing: 1px; }
+.bet-result-badge.won { background: rgba(53,208,127,.15); color: #35d07f; border: 1px solid rgba(53,208,127,.3); }
+.bet-result-badge.lost { background: rgba(232,69,69,.15); color: #e84545; border: 1px solid rgba(232,69,69,.3); }
+.bet-result-badge.pending { background: rgba(245,197,24,.15); color: #f5c518; border: 1px solid rgba(245,197,24,.3); }
+.bet-change { font-size: 14px; font-weight: 800; }
+.bet-change.positive { color: #35d07f; }
+.bet-change.negative { color: #e84545; }
+.bet-change.neutral { color: #888; }
+
+@media (max-width: 480px) {
+  .summary-grid { grid-template-columns: repeat(2, 1fr); }
+  .bet-mid { display: none; }
+  .balance-num { font-size: 36px; }
+}

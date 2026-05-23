@@ -10,6 +10,8 @@ import Dashboard from './pages/Dashboard';
 import Admin from './pages/Admin';
 import MatchDetail from './pages/MatchDetail';
 import CasinoHub from './pages/CasinoHub';
+import Wallet from './pages/Wallet';
+import './App.css';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -43,6 +45,7 @@ const AppContent = () => {
           <Route path="/match/:id" element={<ProtectedRoute><MatchDetail /></ProtectedRoute>} />
           <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
           <Route path="/casino" element={<ProtectedRoute><CasinoHub /></ProtectedRoute>} />
+          <Route path="/wallet" element={<ProtectedRoute><Wallet /></ProtectedRoute>} />
           <Route path="/admin" element={<AdminRoute><Admin /></AdminRoute>} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>

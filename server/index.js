@@ -25,6 +25,7 @@ app.use('/api/auth', require('./routes/auth'));
 app.use('/api/matches', require('./routes/matches'));
 app.use('/api/bets', require('./routes/bets'));
 app.use('/api/sessions', require('./routes/sessions'));
+app.use('/api/casino', require('./routes/casino'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/activematch', require('./routes/activematch')); // ← NEW
  

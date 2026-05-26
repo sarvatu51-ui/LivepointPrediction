@@ -57,7 +57,7 @@ const CasinoHub = () => {
           </div>
         </div>
         <div className="pts-display">
-          <span>🪙</span>
+          <span>₹</span>
           <span className="pts-val">{Math.floor(displayPoints || 0).toLocaleString()}</span>
         </div>
       </div>

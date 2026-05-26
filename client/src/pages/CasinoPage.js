@@ -99,7 +99,7 @@ const CasinoPage = () => {
           </div>
           <div className="casino-balance">
             <span className="balance-label">Your Balance</span>
-            <span className="balance-val">🪙 {user?.points?.toLocaleString()}</span>
+            <span className="balance-val">₹ {user?.points?.toLocaleString()}</span>
           </div>
         </div>
 
@@ -167,7 +167,7 @@ const CasinoPage = () => {
                 <div className="form-group">
                   <label className="form-label">Stake Amount</label>
                   <div className="stake-input-wrap">
-                    <span className="stake-icon">🪙</span>
+                    <span className="stake-icon">₹</span>
                     <input
                       type="number"
                       className="form-input stake-input"

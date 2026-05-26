@@ -36,7 +36,7 @@ const Navbar = () => {
             <>
               {/* Wallet / Points pill — clickable */}
               <Link to="/wallet" className="points-pill" title="View wallet & bet history">
-                <span className="points-icon">🪙</span>
+                <span className="points-icon">₹</span>
                 <span className="points-amount">{(user.points || 0).toLocaleString()}</span>
               </Link>
 

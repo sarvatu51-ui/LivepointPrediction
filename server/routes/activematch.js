@@ -6,6 +6,7 @@ const Match = require('../models/Match');
 // ── ActiveMatch schema ───────────────────────────────────────────────────────
 const activeMatchSchema = new mongoose.Schema({
   matchId: { type: mongoose.Schema.Types.ObjectId, ref: 'Match' },
+  battingTeam: { type: String, default: 'teamA' }, // ← NEW: tracks which team is batting
   updatedAt: { type: Date, default: Date.now }
 });
 const ActiveMatch = mongoose.models.ActiveMatch || mongoose.model('ActiveMatch', activeMatchSchema);
@@ -31,6 +32,9 @@ function parseScore(text) {
   else if (t.includes('WKT') || t.includes('WICKET') || t.includes('BOWLED') ||
     t.includes('CAUGHT') || t.includes('LBW')) result.eventType = 'wicket';
   else if (t.match(/\d+\s+OVER\s+\d+\/\d/i)) result.eventType = 'over_end';
+
+  // Skip betting odds format e.g. "57-8 6 OVER" or "67 KA 90/11 6 OVER"
+  if (t.match(/\d+\s*KA\s*\d+/) || t.match(/\d+-\d+\s+\d+\s+OVER/)) return result;
  
   // over.ball score/wickets e.g. "9.1  61/4"
   const overBallMatch = text.match(/(\d{1,2})\.(\d)\s+(\d+)\/(\d)/);
@@ -70,22 +74,43 @@ function parseScore(text) {
 }
  
 // ── Odds calculator ──────────────────────────────────────────────────────────
-function calculateLiveOdds(scoreData) {
+function calculateLiveOdds(scoreData, battingTeam, match) {
   const { runs, wickets, overNumber } = scoreData;
   if (runs === null || !overNumber || overNumber === 0) return null;
  
-  const PAR_SCORE = 160;
   const TOTAL_OVERS = 20;
-  const oversLeft = TOTAL_OVERS - overNumber;
-  const currentRR = runs / overNumber;
-  const projected = runs + (currentRR * oversLeft) - (wickets * 8);
- 
-  let prob = Math.min(0.85, Math.max(0.15, projected / (PAR_SCORE * 2)));
   const MARGIN = 0.95;
-  return {
-    battingOdds: parseFloat((MARGIN / prob).toFixed(2)),
-    bowlingOdds: parseFloat((MARGIN / (1 - prob)).toFixed(2))
-  };
+
+  if (battingTeam === 'teamA') {
+    // First innings — project final score
+    const PAR_SCORE = 160;
+    const oversLeft = TOTAL_OVERS - overNumber;
+    const currentRR = runs / overNumber;
+    const projected = runs + (currentRR * oversLeft) - (wickets * 8);
+    let prob = Math.min(0.85, Math.max(0.15, projected / (PAR_SCORE * 2)));
+    return {
+      battingOdds: parseFloat((MARGIN / prob).toFixed(2)),
+      bowlingOdds: parseFloat((MARGIN / (1 - prob)).toFixed(2))
+    };
+  } else {
+    // Second innings — chase odds based on target
+    const target = (match.score?.teamA?.runs || 0) + 1;
+    if (!target || target <= 0) return null;
+    const runsNeeded = target - runs;
+    const ballsLeft = (TOTAL_OVERS * 6) - (overNumber * 6 + (scoreData.ballNumber || 0));
+    if (ballsLeft <= 0) return null;
+    const requiredRR = (runsNeeded / ballsLeft) * 6;
+    const currentRR = overNumber > 0 ? (runs / overNumber) : 0;
+    // Higher required RR means chasing team less likely to win
+    let chaseProb = Math.min(0.85, Math.max(0.15, currentRR / (currentRR + requiredRR)));
+    // Also factor in wickets lost
+    chaseProb = chaseProb * (1 - (wickets * 0.05));
+    chaseProb = Math.min(0.85, Math.max(0.15, chaseProb));
+    return {
+      battingOdds: parseFloat((MARGIN / chaseProb).toFixed(2)),      // chasing team odds
+      bowlingOdds: parseFloat((MARGIN / (1 - chaseProb)).toFixed(2)) // defending team odds
+    };
+  }
 }
  
 // ── Auto-settle sessions ─────────────────────────────────────────────────────
@@ -111,7 +136,6 @@ async function autoSettleSessions(match, overNumber, actualRuns, io) {
   if (!changed) return;
   await match.save();
  
-  // Pay out winners
   try {
     const SessionBet = mongoose.models.SessionBet;
     const User = mongoose.models.User;
@@ -137,28 +161,41 @@ async function autoSettleSessions(match, overNumber, actualRuns, io) {
 // ROUTES
 // ════════════════════════════════════════════════════════════════════════════
  
-// GET /api/activematch — bot calls this to get current live match
+// GET /api/activematch
 router.get('/', async (req, res) => {
   try {
     const active = await ActiveMatch.findOne().sort({ updatedAt: -1 });
-    res.json({ matchId: active?.matchId || null });
+    res.json({ matchId: active?.matchId || null, battingTeam: active?.battingTeam || 'teamA' });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
  
-// POST /api/activematch/set — admin sets which match is live
+// POST /api/activematch/set
 router.post('/set', async (req, res) => {
   try {
     const { matchId } = req.body;
     await ActiveMatch.deleteMany({});
-    const active = await ActiveMatch.create({ matchId });
+    const active = await ActiveMatch.create({ matchId, battingTeam: 'teamA' });
     await Match.findByIdAndUpdate(matchId, { status: 'live' });
     const io = req.app.get('io');
     if (io) io.emit('activematchChanged', { matchId });
     res.json({ success: true, active });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+// POST /api/activematch/switchinnings — admin switches to second innings
+router.post('/switchinnings', async (req, res) => {
+  try {
+    const active = await ActiveMatch.findOne().sort({ updatedAt: -1 });
+    if (!active) return res.status(404).json({ error: 'No active match' });
+    const newBattingTeam = active.battingTeam === 'teamA' ? 'teamB' : 'teamA';
+    active.battingTeam = newBattingTeam;
+    await active.save();
+    console.log(`🔄 Innings switched → ${newBattingTeam} is now batting`);
+    res.json({ success: true, battingTeam: newBattingTeam });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
  
-// POST /api/activematch/clear — admin clears active match
+// POST /api/activematch/clear
 router.post('/clear', async (req, res) => {
   try {
     await ActiveMatch.deleteMany({});
@@ -166,7 +203,7 @@ router.post('/clear', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
  
-// POST /api/activematch/livescore — bot posts every score update here
+// POST /api/activematch/livescore
 router.post('/livescore', botAuth, async (req, res) => {
   try {
     const { text } = req.body;
@@ -177,16 +214,17 @@ router.post('/livescore', botAuth, async (req, res) => {
  
     const match = await Match.findById(active.matchId);
     if (!match) return res.json({ skipped: true, reason: 'Match not found' });
- 
+
+    const battingTeam = active.battingTeam || 'teamA';
     const scoreData = parseScore(text);
  
-    // Update score
+    // Update score for the correct batting team
     if (scoreData.runs !== null) {
       if (!match.score) match.score = { teamA: {}, teamB: {} };
-      match.score.teamA = {
+      match.score[battingTeam] = {
         runs: scoreData.runs,
         wickets: scoreData.wickets || 0,
-        overs: scoreData.overs || match.score.teamA?.overs || '0.0'
+        overs: scoreData.overs || match.score[battingTeam]?.overs || '0.0'
       };
       match.lastBall = scoreData.rawText;
       if (scoreData.currentBatsman) match.currentBatsman = scoreData.currentBatsman;
@@ -198,10 +236,16 @@ router.post('/livescore', botAuth, async (req, res) => {
  
     // Recalculate odds
     if (scoreData.runs !== null && scoreData.overNumber > 0) {
-      const newOdds = calculateLiveOdds(scoreData);
+      const newOdds = calculateLiveOdds(scoreData, battingTeam, match);
       if (newOdds) {
-        match.oddsTeamA = newOdds.battingOdds;
-        match.oddsTeamB = newOdds.bowlingOdds;
+        if (battingTeam === 'teamA') {
+          match.oddsTeamA = newOdds.battingOdds;
+          match.oddsTeamB = newOdds.bowlingOdds;
+        } else {
+          // In 2nd innings teamB is chasing so flip odds correctly
+          match.oddsTeamB = newOdds.battingOdds;
+          match.oddsTeamA = newOdds.bowlingOdds;
+        }
         if (io) io.emit('oddsUpdated', { matchId: match._id, oddsTeamA: match.oddsTeamA, oddsTeamB: match.oddsTeamB });
       }
     }
@@ -213,19 +257,18 @@ router.post('/livescore', botAuth, async (req, res) => {
       io.emit('matchUpdated', match);
     }
  
-    // Auto-settle sessions when an over ends
     if (scoreData.eventType === 'over_end' && scoreData.overNumber && scoreData.runs !== null) {
       await autoSettleSessions(match, scoreData.overNumber, scoreData.runs, io);
     }
  
-    res.json({ success: true, scoreData });
+    res.json({ success: true, scoreData, battingTeam });
   } catch (err) {
     console.error('Livescore error:', err);
     res.status(500).json({ error: err.message });
   }
 });
  
-// POST /api/activematch/cashout — user cashes out their match bet
+// POST /api/activematch/cashout
 router.post('/cashout', async (req, res) => {
   try {
     const { betId, userId } = req.body;
@@ -242,8 +285,6 @@ router.post('/cashout', async (req, res) => {
     if (!match) return res.status(404).json({ error: 'Match not found' });
  
     const currentOdds = bet.selectedTeam === 'teamA' ? match.oddsTeamA : match.oddsTeamB;
- 
-    // Industry cashout formula: (stake × originalOdds) / currentOdds × 0.90
     const cashoutValue = Math.floor((bet.pointsBet * bet.oddsAtTime) / currentOdds * 0.90);
  
     bet.status = 'cashout';
@@ -252,10 +293,8 @@ router.post('/cashout', async (req, res) => {
     await bet.save();
  
     const updatedUser = await User.findByIdAndUpdate(userId, { $inc: { points: cashoutValue } }, { new: true });
- 
     res.json({ success: true, cashoutValue, newPoints: updatedUser.points });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
  
 module.exports = router;
- 

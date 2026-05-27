@@ -16,8 +16,9 @@ const Admin = () => {
   const [newSession, setNewSession] = useState({ sessionType: '', label: '', line: '', oddsOver: 1.9, oddsUnder: 1.9, oddsTeamA: 1.9, oddsTeamB: 1.9 });
   const [settleModal, setSettleModal] = useState(null);
   const [settleValue, setSettleValue] = useState('');
-  const [activeMatchId, setActiveMatchId] = useState(null); // ← NEW
-  const [liveLoading, setLiveLoading] = useState(false);   // ← NEW
+  const [activeMatchId, setActiveMatchId] = useState(null);
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [battingTeam, setBattingTeam] = useState('teamA'); // ← NEW: tracks innings
  
   const [newMatch, setNewMatch] = useState({
     teamA: '', teamB: '', teamALogo: '', teamBLogo: '',
@@ -50,7 +51,17 @@ const Admin = () => {
     try {
       const res = await api.get('/activematch');
       setActiveMatchId(res.data.matchId || null);
+      setBattingTeam(res.data.battingTeam || 'teamA');
     } catch (err) { console.error(err); }
+  };
+
+  // Switch innings — call when first innings ends
+  const switchInnings = async () => {
+    try {
+      const res = await api.post('/activematch/switchinnings');
+      setBattingTeam(res.data.battingTeam);
+      showToast(`🔄 Switched to 2nd innings — now tracking ${res.data.battingTeam === 'teamA' ? matches.find(m => m._id === activeMatchId)?.teamA : matches.find(m => m._id === activeMatchId)?.teamB}`);
+    } catch (err) { showToast('Failed to switch innings', 'error'); }
   };
  
   // ── NEW: set a match as the live match (bot sends scores here) ───────────
@@ -179,7 +190,11 @@ const Admin = () => {
         {activeMatchId && (
           <div className="live-match-banner">
             <span>🔴 LIVE BOT ACTIVE — Scores sending to: <strong>{matches.find(m => m._id === activeMatchId)?.teamA} vs {matches.find(m => m._id === activeMatchId)?.teamB}</strong></span>
-            <button className="btn btn-danger btn-sm" onClick={clearLiveMatch}>Stop Live</button>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <span style={{ fontSize: 12, opacity: 0.8 }}>Batting: <strong>{battingTeam === 'teamA' ? matches.find(m => m._id === activeMatchId)?.teamA : matches.find(m => m._id === activeMatchId)?.teamB}</strong></span>
+              <button className="btn btn-sm" style={{ background: '#f59e0b', color: '#000', border: 'none' }} onClick={switchInnings}>🔄 Switch Innings</button>
+              <button className="btn btn-danger btn-sm" onClick={clearLiveMatch}>Stop Live</button>
+            </div>
           </div>
         )}
  
@@ -518,4 +533,3 @@ const Admin = () => {
 };
  
 export default Admin;
- 

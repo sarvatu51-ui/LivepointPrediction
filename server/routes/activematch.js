@@ -73,42 +73,108 @@ function parseScore(text) {
   return result;
 }
  
-// ── Odds calculator ──────────────────────────────────────────────────────────
+// ── Realistic Odds Calculator ─────────────────────────────────────────────────
 function calculateLiveOdds(scoreData, battingTeam, match) {
-  const { runs, wickets, overNumber } = scoreData;
+  const { runs, wickets, overNumber, ballNumber } = scoreData;
   if (runs === null || !overNumber || overNumber === 0) return null;
- 
+
   const TOTAL_OVERS = 20;
-  const MARGIN = 0.95;
+  const TOTAL_BALLS = 120;
+  const MARGIN = 0.95; // bookmaker margin (5%)
+  const ballsDone = (overNumber * 6) + (ballNumber || 0);
+  const ballsLeft = TOTAL_BALLS - ballsDone;
+  const wicketsLeft = 10 - (wickets || 0);
+  const currentRR = runs / overNumber;
+
+  // Expected scoring rates by phase (T20 IPL averages)
+  function getExpectedRR(over) {
+    if (over <= 6) return 8.5;   // powerplay
+    if (over <= 10) return 7.5;  // early middle
+    if (over <= 15) return 8.0;  // middle
+    return 10.5;                  // death overs
+  }
+
+  // Wicket pressure factor — early wickets hurt more
+  function getWicketFactor(wkts, over) {
+    const baseImpact = wkts * 8;
+    // Early wickets (powerplay) hurt more
+    if (over <= 6) return baseImpact * 1.5;
+    if (over <= 10) return baseImpact * 1.2;
+    return baseImpact;
+  }
 
   if (battingTeam === 'teamA') {
-    // First innings — project final score
-    const PAR_SCORE = 160;
-    const oversLeft = TOTAL_OVERS - overNumber;
-    const currentRR = runs / overNumber;
-    const projected = runs + (currentRR * oversLeft) - (wickets * 8);
-    let prob = Math.min(0.85, Math.max(0.15, projected / (PAR_SCORE * 2)));
+    // ── FIRST INNINGS ──
+    // Project remaining runs using phase-aware expected run rates
+    let projectedRemaining = 0;
+    for (let o = overNumber + 1; o <= TOTAL_OVERS; o++) {
+      projectedRemaining += getExpectedRR(o);
+    }
+    // Partial current over remaining balls
+    const currentOverBallsLeft = 6 - (ballNumber || 0);
+    projectedRemaining += (getExpectedRR(overNumber) / 6) * currentOverBallsLeft;
+
+    const projectedTotal = runs + projectedRemaining - getWicketFactor(wickets, overNumber);
+    const projectedCapped = Math.max(projectedTotal, runs); // can't go below current
+
+    // Par score for T20 IPL is ~175
+    const PAR = 175;
+    // Probability batting team scores competitive total (>PAR)
+    let prob = projectedCapped / (PAR * 2);
+    prob = Math.min(0.88, Math.max(0.12, prob));
+
     return {
       battingOdds: parseFloat((MARGIN / prob).toFixed(2)),
       bowlingOdds: parseFloat((MARGIN / (1 - prob)).toFixed(2))
     };
+
   } else {
-    // Second innings — chase odds based on target
+    // ── SECOND INNINGS (CHASE) ──
     const target = (match.score?.teamA?.runs || 0) + 1;
-    if (!target || target <= 0) return null;
+    if (!target || target <= 1 || ballsLeft <= 0) return null;
+
     const runsNeeded = target - runs;
-    const ballsLeft = (TOTAL_OVERS * 6) - (overNumber * 6 + (scoreData.ballNumber || 0));
-    if (ballsLeft <= 0) return null;
     const requiredRR = (runsNeeded / ballsLeft) * 6;
-    const currentRR = overNumber > 0 ? (runs / overNumber) : 0;
-    // Higher required RR means chasing team less likely to win
-    let chaseProb = Math.min(0.85, Math.max(0.15, currentRR / (currentRR + requiredRR)));
-    // Also factor in wickets lost
-    chaseProb = chaseProb * (1 - (wickets * 0.05));
-    chaseProb = Math.min(0.85, Math.max(0.15, chaseProb));
+
+    // Base probability from RRR vs current RR ratio
+    let chaseProb;
+
+    if (runsNeeded <= 0) {
+      // Already won
+      chaseProb = 0.95;
+    } else if (ballsLeft <= 0) {
+      // No balls left
+      chaseProb = 0.05;
+    } else {
+      // Core formula: how achievable is the required rate
+      const rrRatio = currentRR / requiredRR;
+
+      // Wickets in hand factor — more wickets = more chance
+      const wicketsFactor = Math.pow(wicketsLeft / 10, 0.5);
+
+      // Phase factor — harder to chase in last 5 overs with high RRR
+      const phase = overNumber > 15 ? 1.3 : overNumber > 10 ? 1.1 : 1.0;
+
+      // Historical T20 chase success rates based on RRR
+      // RRR < 6: 85% success, RRR 6-8: 65%, RRR 8-10: 45%, RRR 10-12: 25%, RRR >12: 10%
+      let baseProb;
+      if (requiredRR < 6) baseProb = 0.85;
+      else if (requiredRR < 8) baseProb = 0.65;
+      else if (requiredRR < 10) baseProb = 0.45;
+      else if (requiredRR < 12) baseProb = 0.25;
+      else if (requiredRR < 15) baseProb = 0.12;
+      else baseProb = 0.05;
+
+      // Adjust for how well chasing team is doing vs required
+      const performanceAdj = rrRatio > 1 ? Math.min(1.3, rrRatio) : Math.max(0.7, rrRatio);
+
+      chaseProb = baseProb * wicketsFactor * performanceAdj / phase;
+      chaseProb = Math.min(0.90, Math.max(0.05, chaseProb));
+    }
+
     return {
-      battingOdds: parseFloat((MARGIN / chaseProb).toFixed(2)),      // chasing team odds
-      bowlingOdds: parseFloat((MARGIN / (1 - chaseProb)).toFixed(2)) // defending team odds
+      battingOdds: parseFloat((MARGIN / chaseProb).toFixed(2)),       // chasing team
+      bowlingOdds: parseFloat((MARGIN / (1 - chaseProb)).toFixed(2))  // defending team
     };
   }
 }
